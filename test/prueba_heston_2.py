@@ -1,11 +1,14 @@
+import sys
+sys.path.append("../")
+sys.path.append("./")
+
 from pathlib import Path
 import numpy as np
 import tensorflow as tf
 
-import libs.pinns as pn
-from libs.stochastic_processes import HestonProcess
-from libs.ql_asset_valuator.vanilla_heston import VanillaHestonQL
-from libs.pinns.geometry.aux_functions import createLatinHypercubeMesh
+import src.losses as losses
+from models.heston import VanillaHestonQL
+from src.geometry.aux_functions import createLatinHypercubeMesh
 
 
 def main(ntrials=1):

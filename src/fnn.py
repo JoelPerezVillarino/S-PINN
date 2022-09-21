@@ -1,6 +1,5 @@
 import tensorflow as tf
 
-from ..neural_network import regularizers
 from .custom_layers import ScaledOutputLayer
 
 
@@ -18,7 +17,6 @@ class ScaledOutputFNN(tf.keras.Model):
             name=None
     ):
         super(ScaledOutputFNN, self).__init__(name=name)
-        self.regularizer = regularizers.get(regularization)
         self.dropout_rate = dropout_rate
 
         self._input_transform = None
@@ -32,7 +30,6 @@ class ScaledOutputFNN(tf.keras.Model):
                     units,
                     activation=activation,
                     kernel_initializer=kernel_init,
-                    kernel_regularizer=self.regularizer,
                 )
             )
 
@@ -79,7 +76,6 @@ class FNN(tf.keras.Model):
             name=None
     ):
         super(FNN, self).__init__(name=name)
-        self.regularizer = regularizers.get(regularization)
         self.dropout_rate = dropout_rate
 
         self._input_transform = None
@@ -93,7 +89,6 @@ class FNN(tf.keras.Model):
                     units,
                     activation=activation,
                     kernel_initializer=kernel_init,
-                    kernel_regularizer=self.regularizer,
                 )
             )
 
@@ -106,7 +101,6 @@ class FNN(tf.keras.Model):
                 layer_sizes[-1],
                 activation="linear",
                 kernel_initializer=kernel_init,
-                kernel_regularizer=self.regularizer
             )
         )
 
