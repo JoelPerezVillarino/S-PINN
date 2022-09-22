@@ -13,6 +13,7 @@ class Spvsd(object):
         # methods initialized in compile
         self.loss = None
         self.loss_weights = None
+        self.mask = None
 
 
     def compile(self, optimizer, loss = None, metrics = None, loss_weights=None):
@@ -23,7 +24,7 @@ class Spvsd(object):
         self.metrics = metrics 
 
         if loss_weights is None:
-            loss_weights = tf.convert_to_tensor([1.])
+            loss_weights = tf.convert_to_tensor([1., 1., 1.])
         self.loss_weights = loss_weights
        
         if loss is None: 
@@ -32,7 +33,7 @@ class Spvsd(object):
 
 
     def compute_loss(self,y,y_pred):
-        losses = [self.loss(y[:, i],y_pred[:, i]) for i in range(y.shape[1])]
+        losses = [self.loss(y[:,i],y_pred[:,i]) for i in range(y.shape[1])]
         losses = tf.convert_to_tensor(losses)
         # Weighted losses
         losses *= self.loss_weights
@@ -49,14 +50,28 @@ class Spvsd(object):
         grads = tape.gradient(total_loss, self.net.trainable_variables)
         self.opt.apply_gradients(zip(grads, self.net.trainable_variables))
 
+        for m in self.metrics:
+            m.update_state(y, y_pred[0])
 
-    def fit(self, x, y, epochs=100, validation_data=None,display_every=1):
+
+    def fit(self, x, y, mask, epochs=100, validation_data=None,display_every=1):
         print("Training model...\n")
+        x = tf.constant(x, dtype = tf.float32)
+        y = tf.constant(y, dtype = tf.float32)
         data = (x,y)
+
+
+        self.mask = [ i for i in range(x.shape[1]) ]
+        print(self.mask)
 
         for i in range(epochs):
             self.train_step(data)
-            print(f"Epoch: {i}")
+            
+            epoch_str = f"Epoch: {i}"
+            metrics_str = [" | "+m.name+": "+str(float(m.result())) for m in self.metrics]
+            print(epoch_str+''.join(metrics_str))
+            [m.reset_states() for m in self.metrics]
+
 
         return None 
 
@@ -65,6 +80,11 @@ class Spvsd(object):
         return self.net(x,training = False)
     
     def call(self, x, training = None):
-        return self.net(x,training = training)
+        with tf.GradientTape() as tape:
+            tape.watch(x)
+            y = self.net(x,training = training)
+        y_grad = tape.gradient(y,x)
+        y_grad = tf.gather(y_grad,self.mask, axis = 1) 
+        return tf.concat((y,y_grad), axis = 1)
     
 
