@@ -48,15 +48,14 @@ y = (np.sin(x[:,0]) + np.sin(x[:,1]))[:,None]
 y_grad_0 = (np.cos(x[:,0]))[:,None]
 y_grad_1 = (np.cos(x[:,1]))[:,None]
 target = np.concatenate((y,y_grad_0,y_grad_1), axis = 1)
-spvsd.fit(x,target,epochs)
+spvsd.fit(x,target,epochs,validation_data = (x,target))
 
 # Prediction
-y_pred = spvsd.predict(x)
+y_pred = spvsd.call(tf.constant(x,dtype = tf.float32))
 
 # Plot
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-surf1 = ax.scatter(x[:,0],x[:,1], y_pred[:,0], color = "blue", label = "net" )
-surf2 = ax.scatter(x[:,0], x[:,1], y[:,0], color = "red", label = "exact")
+surf1 = ax.scatter(x[:,0],x[:,1], np.abs(y_pred[:,0]-y[:,0]), color = "blue", label = "Error value+grad" )
 plt.legend()
 plt.show()

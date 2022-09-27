@@ -21,6 +21,7 @@ class ScaledOutputFNN(tf.keras.Model):
 
         self._input_transform = None
         self._output_transform = None
+        self.n_inputs = layer_sizes[0]
 
         # Hidden layers
         self.denses = []
@@ -80,6 +81,7 @@ class FNN(tf.keras.Model):
 
         self._input_transform = None
         self._output_transform = None
+        self.n_inputs = layer_sizes[0]
 
         # Hidden layers
         self.denses = []
