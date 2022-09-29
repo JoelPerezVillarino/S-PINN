@@ -26,6 +26,20 @@ y_grad_0 = (np.cos(x[:,0]))[:,None]
 y_grad_1 = (np.cos(x[:,1]))[:,None]
 target = np.concatenate((y,y_grad_0,y_grad_1), axis = 1)
 
+# Train test split
+test_size = 0.2
+cut = int(x.shape[0]*(1-test_size))
+
+idx = np.arange(x.shape[0])
+np.random.shuffle(idx)
+idx_train = idx[:cut]
+idx_test = idx[cut:]
+
+x_train = x[idx_train]
+y_train = target[idx_train]
+x_test = x[idx_test]
+y_test = target[idx_test]
+
 # Model parameters
 n_inputs = 2
 n_outputs = 1
@@ -48,14 +62,14 @@ loss = tf.keras.losses.MeanSquaredError()
 metric_1 = tf.keras.metrics.MeanSquaredError()
 metric_2 = tf.keras.metrics.MeanAbsoluteError()
 metrics = [metric_1,metric_2]
-mask = [1,1,1]
+mask = [0,1,2]
 loss_weights = [0.33,0.33,0.33]
 
 spvsd.compile(optimizer,loss,metrics, mask = mask, loss_weights = loss_weights)
 
 # Training
 epochs = 100
-spvsd.fit(x,target,epochs,validation_data = (x,target))
+spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
 
 # Prediction
 y_pred_1 = spvsd.call(tf.constant(x,dtype = tf.float32))
@@ -69,14 +83,14 @@ loss = tf.keras.losses.MeanSquaredError()
 metric_1 = tf.keras.metrics.MeanSquaredError()
 metric_2 = tf.keras.metrics.MeanAbsoluteError()
 metrics = [metric_1,metric_2]
-mask = [1,0,0]
+mask = [0]
 loss_weights = [1]
 
 spvsd.compile(optimizer,loss,metrics, mask = mask, loss_weights = loss_weights)
 
 # Training
 epochs = 100
-spvsd.fit(x,target,epochs,validation_data = (x,target))
+spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
 
 # Prediction
 y_pred_2 = spvsd.call(tf.constant(x,dtype = tf.float32))

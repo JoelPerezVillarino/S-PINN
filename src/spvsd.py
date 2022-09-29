@@ -20,8 +20,9 @@ class Spvsd(object):
         # History
         self.metric_history = None
 
+        self.compute_loss = None
 
-    def compile(self, optimizer = None, loss = None, metrics = None, loss_weights=None, metric_weights = None, mask = None):
+    def compile(self, optimizer = None, loss = None, metrics = None, loss_weights=None, metric_weights = None, mask = None, label = "1"):
         print("Compiling model...")
         if optimizer is None:
             optimizer = tf.keras.optimizers.Adam(0.01)
@@ -44,10 +45,15 @@ class Spvsd(object):
         self.metric_weights = metric_weights
         
         if mask is None:
-            mask = [ 1 for i in range(self.net.n_inputs+1) ]
+            mask = [ 1 for i in range(self.net.n_inputs+1+int(self.net.n_inputs**2)) ]
         self.mask = mask
 
         self.metric_history = []
+        
+        if label=="2":
+            self.compute_loss = self.compute_loss2
+        else:
+            self.compute_loss = self.compute_loss1
         
         epoch_list = []
         for i in range(len(self.metrics)):
@@ -60,8 +66,18 @@ class Spvsd(object):
         self.metric_history.append(epoch_list)
 
 
-    def compute_loss(self,y,y_pred):
+    def compute_loss1(self,y,y_pred):
         losses = [self.loss(y[:,i],y_pred[:,i]) for i in range(y_pred.shape[1])]
+        losses = tf.convert_to_tensor(losses)
+        # Weighted losses
+        losses *= self.loss_weights
+        total_loss = tf.math.reduce_sum(losses)
+        return total_loss
+    
+    def compute_loss2(self,y,y_pred):
+        loss_spvsd = self.loss(y[:,0],y_pred[:,0]) 
+        loss_pinn = self.loss(y[:,0],-y_pred[:,1]) 
+        losses = [loss_spvsd, loss_pinn]
         losses = tf.convert_to_tensor(losses)
         # Weighted losses
         losses *= self.loss_weights
@@ -129,16 +145,26 @@ class Spvsd(object):
             self.compute_metrics(validation_data)
             
 
-        return self.metric_history 
+        return np.array(self.metric_history)
 
     
     def call(self, x, training = None):
-        with tf.GradientTape() as tape:
-            tape.watch(x)
-            y = self.net(x,training = training)
-        y_grad = tape.gradient(y,x)
-        y_concat = tf.concat((y,y_grad), axis = 1)
-        y_mask = tf.gather(y_concat,self.mask, axis = 1) 
+        with tf.GradientTape(persistent = True) as tape1:
+            tape1.watch(x)
+            with tf.GradientTape() as tape2:
+                tape2.watch(x)
+                y = self.net(x,training = training)
+            y_grad = tape2.gradient(y,x)
+            y = tf.concat((y,y_grad), axis = 1)
+            for i in range(x.shape[1]):
+                y_hess = tape1.gradient(y_grad,x)
+                y = tf.concat((y,y_hess),axis = 1)
+
+        # Erase tapes
+        del tape1
+        del tape2
+        
+        y_mask = tf.gather(y,self.mask, axis = 1) 
         return y_mask
     
 
