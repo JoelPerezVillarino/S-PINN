@@ -15,6 +15,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 from src.fnn import FNN
 from src.spvsd import Spvsd
+from src.losses import spvsd_loss, spvsd_gradients_loss
 
 # Gemerate dataset
 x1 = np.linspace(0,np.pi)[:,None]
@@ -49,23 +50,25 @@ n_units = 4
 activation = "tanh"
 kernel_init = "glorot_uniform"
 
-net = FNN([n_inputs]+[n_units]*n_layers+[n_outputs],activation = activation ,kernel_init = kernel_init)
-
-spvsd = Spvsd(net)
 
 #####################
 # Values+Derivatives
 ####################
+net = FNN([n_inputs]+[n_units]*n_layers+[n_outputs],activation = activation ,kernel_init = kernel_init)
+spvsd = Spvsd(net)
 # Compilation
 optimizer = tf.keras.optimizers.Adam(lr = 0.1)
 loss = tf.keras.losses.MeanSquaredError()
 metric_1 = tf.keras.metrics.MeanSquaredError()
 metric_2 = tf.keras.metrics.MeanAbsoluteError()
 metrics = [metric_1,metric_2]
-mask = [0,1,2]
-loss_weights = [0.33,0.33,0.33]
 
-spvsd.compile(optimizer,loss,metrics, mask = mask, loss_weights = loss_weights)
+mask_metric = [0,1,2]
+mask_loss = [0,1,2]
+loss_weights = [0.33,0.33,0.33]
+loss = lambda func, x, y: spvsd_gradients_loss(func,x,y,loss_weights,tf.keras.losses.MeanSquaredError(), mask_loss)
+
+spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
 
 # Training
 epochs = 100
@@ -75,18 +78,23 @@ spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
 y_pred_1 = spvsd.call(tf.constant(x,dtype = tf.float32))
 
 #####################
-# Values+Derivatives
+# Values
 ####################
+net = FNN([n_inputs]+[n_units]*n_layers+[n_outputs],activation = activation ,kernel_init = kernel_init)
+spvsd = Spvsd(net)
 # Compilation
 optimizer = tf.keras.optimizers.Adam(lr = 0.1)
 loss = tf.keras.losses.MeanSquaredError()
 metric_1 = tf.keras.metrics.MeanSquaredError()
 metric_2 = tf.keras.metrics.MeanAbsoluteError()
 metrics = [metric_1,metric_2]
-mask = [0]
-loss_weights = [1]
 
-spvsd.compile(optimizer,loss,metrics, mask = mask, loss_weights = loss_weights)
+mask_metirc = [0,1,2]
+mask_loss = [0]
+loss_weights = [1]
+loss = lambda func, x, y: spvsd_gradients_loss(func,x,y,loss_weights,tf.keras.losses.MeanSquaredError(), mask_loss)
+
+spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
 
 # Training
 epochs = 100

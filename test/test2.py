@@ -15,12 +15,13 @@ from mpl_toolkits.mplot3d import Axes3D
 
 from src.fnn import FNN
 from src.spvsd import Spvsd
+from src.losses import spvsd_gradients_loss, exp_loss
 
 # Gemerate dataset
 n_points = int(10e3)
 x = np.linspace(0,np.pi,n_points)[:,None]
-y = np.sin(x) 
-y_grad = (np.cos(x))
+y = np.exp(x) 
+y_grad = (np.exp(x))
 target = np.concatenate((y,y_grad), axis = 1)
 
 # Train test split
@@ -58,13 +59,15 @@ loss = tf.keras.losses.MeanSquaredError()
 metric_1 = tf.keras.metrics.MeanSquaredError()
 metric_2 = tf.keras.metrics.MeanAbsoluteError()
 metrics = [metric_1,metric_2]
-mask = [0,1]
+
+mask_metric = [0,1]
+mask_loss = [0,1]
 loss_weights = [0.5,0.5]
+loss = lambda func, x, y: spvsd_gradients_loss(func,x,y,loss_weights,tf.keras.losses.MeanSquaredError(), mask_loss)
 
-spvsd.compile(optimizer,loss,metrics, mask = mask, loss_weights = loss_weights)
-
+spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
 # Training
-epochs = 100
+epochs = 300
 metric_history_1 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
 
 # Prediction
@@ -81,13 +84,16 @@ loss = tf.keras.losses.MeanSquaredError()
 metric_1 = tf.keras.metrics.MeanSquaredError()
 metric_2 = tf.keras.metrics.MeanAbsoluteError()
 metrics = [metric_1,metric_2]
-mask = [0]
-loss_weights = [1]
 
-spvsd.compile(optimizer,loss,metrics, mask = mask, loss_weights = loss_weights)
+mask_metric = [0,1]
+mask_loss = [0]
+loss_weights = [1]
+loss = lambda func, x, y: spvsd_gradients_loss(func,x,y,loss_weights,tf.keras.losses.MeanSquaredError(), mask_loss)
+
+spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
 
 # Training
-epochs = 100
+epochs = 300
 metric_history_2 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
 
 # Prediction
@@ -104,13 +110,15 @@ loss = tf.keras.losses.MeanSquaredError()
 metric_1 = tf.keras.metrics.MeanSquaredError()
 metric_2 = tf.keras.metrics.MeanAbsoluteError()
 metrics = [metric_1,metric_2]
-mask = [0,2]
-loss_weights = [0.9,0.1]
 
-spvsd.compile(optimizer,loss,metrics, mask = mask, loss_weights = loss_weights, label = "2")
 
+mask_metric = [0,1]
+loss_weights = [0.5, 0.5]
+loss = lambda func, x, y: exp_loss(func,x,y,loss_weights,tf.keras.losses.MeanSquaredError())
+
+spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
 # Training
-epochs = 100
+epochs = 300
 metric_history_3 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
 
 # Prediction

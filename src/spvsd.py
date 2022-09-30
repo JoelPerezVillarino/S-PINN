@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from itertools import compress
+from src.losses import spvsd_loss
 
 
 class Spvsd(object):
@@ -22,39 +23,28 @@ class Spvsd(object):
 
         self.compute_loss = None
 
-    def compile(self, optimizer = None, loss = None, metrics = None, loss_weights=None, metric_weights = None, mask = None, label = "1"):
+    def compile(self, optimizer = None, loss = None, metrics = None,  mask = None,):
         print("Compiling model...")
         if optimizer is None:
             optimizer = tf.keras.optimizers.Adam(0.01)
         self.opt = optimizer 
 
         if loss is None: 
-            loss = tf.keras.losses.MeanSquaredError()
+            loss = lambda func, x, y: spvsd(func, x, y, tf.keras.losses.MeanSquaredError())
         self.loss = loss
         
         if type(metrics) != list:
             metrics = [metrics]
         self.metrics = metrics 
         
-        if loss_weights is None:
-            loss_weights = tf.convert_to_tensor([0.33, 0.33, 0.33])
-        self.loss_weights = loss_weights
-        
-        if metric_weights is None:
-            metric_weights = tf.convert_to_tensor([1., 0., 0.])
-        self.metric_weights = metric_weights
         
         if mask is None:
-            mask = [ 1 for i in range(self.net.n_inputs+1+int(self.net.n_inputs**2)) ]
+            mask = [ i for i in range(self.net.n_inputs+1+int(self.net.n_inputs**2)) ]
         self.mask = mask
 
         self.metric_history = []
-        
-        if label=="2":
-            self.compute_loss = self.compute_loss2
-        else:
-            self.compute_loss = self.compute_loss1
-        
+       
+        # Initialize metric history
         epoch_list = []
         for i in range(len(self.metrics)):
             metrics_list = []
@@ -66,28 +56,13 @@ class Spvsd(object):
         self.metric_history.append(epoch_list)
 
 
-    def compute_loss1(self,y,y_pred):
-        losses = [self.loss(y[:,i],y_pred[:,i]) for i in range(y_pred.shape[1])]
-        losses = tf.convert_to_tensor(losses)
-        # Weighted losses
-        losses *= self.loss_weights
-        total_loss = tf.math.reduce_sum(losses)
-        return total_loss
-    
-    def compute_loss2(self,y,y_pred):
-        loss_spvsd = self.loss(y[:,0],y_pred[:,0]) 
-        loss_pinn = self.loss(y[:,0],-y_pred[:,1]) 
-        losses = [loss_spvsd, loss_pinn]
-        losses = tf.convert_to_tensor(losses)
-        # Weighted losses
-        losses *= self.loss_weights
-        total_loss = tf.math.reduce_sum(losses)
-        return total_loss
     
     def compute_metrics(self,validation_data):
+        
         x_test = validation_data[0]
         y_test = validation_data[1]
         y_pred = self.call(x_test)
+        y_pred = tf.gather(y_pred,self.mask, axis = 1) 
         
         title = [ '{0: <25}'.format(str(i)) for i in range(sum(self.mask)) ]
         underline = [ '{0: <25}'.format("-"*25) for i in range(sum(self.mask)) ]
@@ -121,8 +96,8 @@ class Spvsd(object):
         x = data[0]
         y = data[1]
         with tf.GradientTape() as tape:
-            y_pred = self.call(x,training = True)
-            total_loss = self.compute_loss(y,y_pred)
+            #y_pred = self.call(x,training = True)
+            total_loss = self.loss(self.call,x,y)
         grads = tape.gradient(total_loss, self.net.trainable_variables)
         self.opt.apply_gradients(zip(grads, self.net.trainable_variables))
 
@@ -164,7 +139,6 @@ class Spvsd(object):
         del tape1
         del tape2
         
-        y_mask = tf.gather(y,self.mask, axis = 1) 
-        return y_mask
+        return y
     
 
