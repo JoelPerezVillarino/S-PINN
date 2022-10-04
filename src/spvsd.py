@@ -124,21 +124,19 @@ class Spvsd(object):
 
     
     def call(self, x, training = None):
-        with tf.GradientTape(persistent = True) as tape1:
+        with tf.GradientTape() as tape1:
             tape1.watch(x)
             with tf.GradientTape() as tape2:
                 tape2.watch(x)
                 y = self.net(x,training = training)
             y_grad = tape2.gradient(y,x)
-            y = tf.concat((y,y_grad), axis = 1)
-            for i in range(x.shape[1]):
-                y_hess = tape1.gradient(y_grad,x)
-                y = tf.concat((y,y_hess),axis = 1)
+        y_hess = tape1.gradient(y_grad,x)
+        result = tf.concat((y,y_grad,y_hess),axis = 1)
 
         # Erase tapes
         del tape1
         del tape2
         
-        return y
+        return result
     
 
