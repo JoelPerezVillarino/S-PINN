@@ -50,3 +50,15 @@ def exp_grad_hess_loss(func,x,y, loss_weights, metric):
     losses *= loss_weights
     total_loss = tf.math.reduce_sum(losses)
     return total_loss
+
+# Trigonometric
+def trig_hess_loss(func,x,y, loss_weights, metric):
+    y_pred = func(x)
+    loss_spvsd = metric(y[:,0],y_pred[:,0]) 
+    loss_pinn = metric(y[:,0],-y_pred[:,2]) 
+    losses = [loss_spvsd, loss_pinn]
+    losses = tf.convert_to_tensor(losses)
+    # Weighted losses
+    losses *= loss_weights
+    total_loss = tf.math.reduce_sum(losses)
+    return total_loss

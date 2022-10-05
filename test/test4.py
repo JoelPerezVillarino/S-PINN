@@ -15,14 +15,14 @@ from mpl_toolkits.mplot3d import Axes3D
 
 from src.fnn import FNN
 from src.spvsd import Spvsd
-from src.losses import spvsd_loss, exp_grad_loss, exp_hess_loss, exp_grad_hess_loss, spvsd_gradients_loss
+from src.losses import spvsd_loss, exp_grad_loss, exp_hess_loss, exp_grad_hess_loss, spvsd_gradients_loss, trig_hess_loss
 
 # Gemerate dataset
 n_points = int(1e5)
-x = np.linspace(-0.5,0.5,n_points)[:,None]
-y = np.exp(x) 
-y_grad = (np.exp(x))
-y_grad_grad = (np.exp(x))
+x = np.linspace(-np.pi/2,np.pi/2,n_points)[:,None]
+y = np.sin(x) 
+y_grad = np.cos(x)
+y_grad_grad = -y
 target = np.concatenate((y,y_grad,y_grad_grad), axis = 1)
 print("Mean: ", np.mean(y))
 
@@ -49,7 +49,7 @@ n_units = 4
 activation = "tanh"
 kernel_init = "glorot_uniform"
 
-initial_learning_rate = 0.1
+initial_learning_rate = 0.05
 decay_steps = 100
 decay_rate = 0.5
 learning_rate = tf.keras.optimizers.schedules.InverseTimeDecay(
@@ -83,85 +83,7 @@ metric_history_1 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_
 y_pred_1 = spvsd.call(tf.constant(x,dtype = tf.float32))
 
 #####################
-# SPINN gradient
-####################
-net = FNN([n_inputs]+[n_units]*n_layers+[n_outputs],activation = activation ,kernel_init = kernel_init)
-spvsd = Spvsd(net)
-learning_rate = tf.keras.optimizers.schedules.InverseTimeDecay(
-  initial_learning_rate, decay_steps, decay_rate)
-optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate)
-# Compilation
-loss = tf.keras.losses.MeanSquaredError()
-metric_1 = tf.keras.metrics.MeanSquaredError()
-metric_2 = tf.keras.metrics.MeanAbsoluteError()
-metrics = [metric_1,metric_2]
-
-
-mask_metric = [0,1,2]
-loss_weights = [0.5, 0.5]
-loss = lambda func, x, y: exp_grad_loss(func,x,y,loss_weights,tf.keras.losses.MeanSquaredError())
-
-spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
-# Training
-metric_history_2 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
-
-# Prediction
-y_pred_2 = spvsd.call(tf.constant(x,dtype = tf.float32))
-
-#####################
-# SPINN hessian
-####################
-net = FNN([n_inputs]+[n_units]*n_layers+[n_outputs],activation = activation ,kernel_init = kernel_init)
-spvsd = Spvsd(net)
-learning_rate = tf.keras.optimizers.schedules.InverseTimeDecay(
-  initial_learning_rate, decay_steps, decay_rate)
-optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate)
-# Compilation
-loss = tf.keras.losses.MeanSquaredError()
-metric_1 = tf.keras.metrics.MeanSquaredError()
-metric_2 = tf.keras.metrics.MeanAbsoluteError()
-metrics = [metric_1,metric_2]
-
-
-mask_metric = [0,1,2]
-loss_weights = [0.5, 0.5]
-loss = lambda func, x, y: exp_hess_loss(func,x,y,loss_weights,tf.keras.losses.MeanSquaredError())
-
-spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
-# Training
-metric_history_3 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
-
-# Prediction
-y_pred_3 = spvsd.call(tf.constant(x,dtype = tf.float32))
-
-#####################
-# SPINN gradient+hessian
-####################
-net = FNN([n_inputs]+[n_units]*n_layers+[n_outputs],activation = activation ,kernel_init = kernel_init)
-spvsd = Spvsd(net)
-learning_rate = tf.keras.optimizers.schedules.InverseTimeDecay(
-  initial_learning_rate, decay_steps, decay_rate)
-optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate)
-# Compilation
-loss = tf.keras.losses.MeanSquaredError()
-metric_1 = tf.keras.metrics.MeanSquaredError()
-metric_2 = tf.keras.metrics.MeanAbsoluteError()
-metrics = [metric_1,metric_2]
-
-
-mask_metric = [0,1,2]
-loss_weights = [0.33, 0.33, 0.33]
-loss = lambda func, x, y: exp_grad_hess_loss(func,x,y,loss_weights,tf.keras.losses.MeanSquaredError())
-
-spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
-# Training
-metric_history_4 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
-
-# Prediction
-y_pred_4 = spvsd.call(tf.constant(x,dtype = tf.float32))
-
-#####################
-# Spvsd gradient+hessian
+# Spvsd hessian
 ####################
 net = FNN([n_inputs]+[n_units]*n_layers+[n_outputs],activation = activation ,kernel_init = kernel_init)
 spvsd = Spvsd(net)
@@ -187,6 +109,34 @@ metric_history_5 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_
 # Prediction
 y_pred_5 = spvsd.call(tf.constant(x,dtype = tf.float32))
 
+#####################
+# SPINN hessian
+####################
+net = FNN([n_inputs]+[n_units]*n_layers+[n_outputs],activation = activation ,kernel_init = kernel_init)
+spvsd = Spvsd(net)
+learning_rate = tf.keras.optimizers.schedules.InverseTimeDecay(
+  initial_learning_rate, decay_steps, decay_rate)
+optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate)
+# Compilation
+loss = tf.keras.losses.MeanSquaredError()
+metric_1 = tf.keras.metrics.MeanSquaredError()
+metric_2 = tf.keras.metrics.MeanAbsoluteError()
+metrics = [metric_1,metric_2]
+
+
+mask_metric = [0,1,2]
+loss_weights = [0.5, 0.5]
+loss = lambda func, x, y: trig_hess_loss(func,x,y,loss_weights,tf.keras.losses.MeanSquaredError())
+
+spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
+# Training
+metric_history_3 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
+
+# Prediction
+y_pred_3 = spvsd.call(tf.constant(x,dtype = tf.float32))
+
+
+
 
 
 
@@ -195,9 +145,7 @@ y_pred_5 = spvsd.call(tf.constant(x,dtype = tf.float32))
 ####################
 fig, ax = plt.subplots(nrows = 2, ncols = 2 )
 ax[0,0].plot(np.arange(epochs),metric_history_1[1:,0,0].astype(np.float32) , color = "blue", label = "Spvsd value" )
-ax[0,0].plot(np.arange(epochs),metric_history_2[1:,0,0].astype(np.float32), color = "red", label = "SPINN value+grad" )
 ax[0,0].plot(np.arange(epochs),metric_history_3[1:,0,0].astype(np.float32), color = "green", label = "SPINN value+hess" )
-ax[0,0].plot(np.arange(epochs),metric_history_4[1:,0,0].astype(np.float32), color = "black", label = "SPINN value+grad+hess" )
 ax[0,0].plot(np.arange(epochs),metric_history_5[1:,0,0].astype(np.float32) , color = "pink", label = "Spvsd value+hess" )
 ax[0,0].set_title("MSE")
 ax[0,0].grid()
@@ -205,9 +153,7 @@ ax[0,0].set_yscale("log")
 plt.legend()
 
 ax[0,1].plot(np.arange(epochs),metric_history_1[1:,0,1].astype(np.float32) , color = "blue", label = "Spvsd value" )
-ax[0,1].plot(np.arange(epochs),metric_history_2[1:,0,1].astype(np.float32) , color = "red", label = "SPINN value+grad" )
 ax[0,1].plot(np.arange(epochs),metric_history_3[1:,0,1].astype(np.float32) , color = "green", label = "SPINN value+hess" )
-ax[0,1].plot(np.arange(epochs),metric_history_4[1:,0,1].astype(np.float32) , color = "black", label = "SPINN value+grad+hess" )
 ax[0,1].plot(np.arange(epochs),metric_history_5[1:,0,1].astype(np.float32) , color = "pink", label = "Spvsd value+hess" )
 ax[0,1].set_title("MSE grad")
 ax[0,1].grid()
@@ -215,9 +161,7 @@ ax[0,1].set_yscale("log")
 plt.legend()
 
 ax[1,0].plot(np.arange(epochs),metric_history_1[1:,0,2].astype(np.float32) , color = "blue", label = "Spvsd value" )
-ax[1,0].plot(np.arange(epochs),metric_history_2[1:,0,2].astype(np.float32) , color = "red", label = "SPINN value+grad" )
 ax[1,0].plot(np.arange(epochs),metric_history_3[1:,0,2].astype(np.float32) , color = "green", label = "SPINN value+hess" )
-ax[1,0].plot(np.arange(epochs),metric_history_4[1:,0,2].astype(np.float32) , color = "black", label = "SPINN value+grad+hess" )
 ax[1,0].plot(np.arange(epochs),metric_history_5[1:,0,2].astype(np.float32) , color = "pink", label = "Spvsd value+hess" )
 ax[1,0].set_title("MSE hess")
 ax[1,0].grid()
@@ -225,14 +169,11 @@ ax[1,0].set_yscale("log")
 plt.legend()
 
 
-ax[1,1].plot(x[:], np.abs(y_pred_1[:,0]), color = "blue", label = "Spvsd value" )
-ax[1,1].plot(x[:], np.abs(y_pred_2[:,0]), color = "red", label = "SPINN value+grad" )
-ax[1,1].plot(x[:], np.abs(y_pred_3[:,0]), color = "green", label = "SPINN value+hess" )
-ax[1,1].plot(x[:], np.abs(y_pred_4[:,0]), color = "black", label = "SPINN value+grad+hess" )
-ax[1,1].plot(x[:], np.abs(y_pred_5[:,0]), color = "pink", label = "Spvsd value+hess" )
+ax[1,1].plot(x[:], y_pred_1[:,0], color = "blue", label = "Spvsd value" )
+ax[1,1].plot(x[:], y_pred_3[:,0], color = "green", label = "SPINN value+hess" )
+ax[1,1].plot(x[:], y_pred_5[:,0], color = "pink", label = "Spvsd value+hess" )
 ax[1,1].set_title("Function")
 ax[1,1].grid()
-ax[1,1].set_yscale("log")
 plt.legend()
 
 plt.show()
