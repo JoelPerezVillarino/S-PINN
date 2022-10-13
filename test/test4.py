@@ -104,7 +104,8 @@ loss = lambda func, x, y: spvsd_gradients_loss(func,x,y,loss_weights,tf.keras.lo
 
 spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
 # Training
-metric_history_5 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
+y_train2 = np.concatenate((y_train[:,0][:, None], y_train[:,2][:, None]), axis = 1)
+metric_history_5 = spvsd.fit(x_train,y_train2,epochs,validation_data = (x_test,y_test))
 
 # Prediction
 y_pred_5 = spvsd.call(tf.constant(x,dtype = tf.float32))

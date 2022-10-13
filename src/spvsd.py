@@ -123,7 +123,7 @@ class Spvsd(object):
         return np.array(self.metric_history)
 
     
-    def call(self, x, training = None):
+    def call2(self, x, training = None):
         with tf.GradientTape() as tape1:
             tape1.watch(x)
             with tf.GradientTape() as tape2:
@@ -131,6 +131,26 @@ class Spvsd(object):
                 y = self.net(x,training = training)
             y_grad = tape2.gradient(y,x)
         y_hess = tape1.gradient(y_grad,x)
+        result = tf.concat((y,y_grad,y_hess),axis = 1)
+
+        # Erase tapes
+        del tape1
+        del tape2
+        
+        return result
+    
+    def call(self, x, training = None):
+        with tf.GradientTape(persistent = True) as tape1:
+            tape1.watch(x)
+            with tf.GradientTape() as tape2:
+                tape2.watch(x)
+                y = self.net(x,training = training)
+            y_grad = tape2.gradient(y,x)
+            y_grad_unstack = tf.unstack(y_grad,axis = 1)
+        d2f_dx2 = []
+        for df_dx in y_grad_unstack:
+            d2f_dx2.append(tape1.gradient(y_grad_unstack,x))
+        y_hess = tf.concat(d2f_dx2, axis = 1)
         result = tf.concat((y,y_grad,y_hess),axis = 1)
 
         # Erase tapes
