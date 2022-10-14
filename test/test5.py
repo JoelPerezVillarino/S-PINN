@@ -1,57 +1,179 @@
+####################################################################
+# Test 1D: Black-Scholes
+####################################################################
+import sys
+sys.path.append("./")
+sys.path.append("../")
+
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+
+import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
-def calc_hessian_diag(f, x):
+from src.fnn import FNN
+from src.spvsd import Spvsd
+from src.losses import spvsd_loss, BS_SPINN
+from scipy.special import ndtr
+
+def blackScholesMerton(
+    S:  np.array,
+    strike: float,
+    tau: float,
+    r: float,
+    sigma: float,
+    q: float,
+    flag="c"
+    ):
     """
-    Calculates the diagonal entries of the Hessian of the function f
-    (which maps rank-1 tensors to scalars) at coordinates x (rank-1
-    tensors).
-    
-    Let k be the number of points in x, and n be the dimensionality of
-    each point. For each point k, the function returns
-
-      (d^2f/dx_1^2, d^2f/dx_2^2, ..., d^2f/dx_n^2) .
-
-    Inputs:
-      f (function): Takes a shape-(k,n) tensor and outputs a
-          shape-(k,) tensor.
-      x (tf.Tensor): The points at which to evaluate the Laplacian
-          of f. Shape = (k,n).
-    
-    Outputs:
-      A tensor containing the diagonal entries of the Hessian of f at
-      points x. Shape = (k,n).
+    Return the Black-Scholes-Merton option price
+    :param S: stock value, S >= 0
+    :param strike: fixed strike, K >= 0
+    :param tau: time to maturity
+    :param r: risk-free interest rate
+    :param sigma: volatility
+    :param q: some kind of dividend yield
+    :param phi: 1 for call, -1 for put
+    :return: Black Scholes value for the given inputs
     """
-    # Use the unstacking and re-stacking trick, which comes
-    # from https://github.com/xuzhiqin1990/laplacian/
-    with tf.GradientTape(persistent=True) as g1:
-        # Turn x into a list of n tensors of shape (k,)
-        #x_unstacked = tf.unstack(x, axis=1)
-        g1.watch(x)
-
-        with tf.GradientTape() as g2:
-            # Re-stack x before passing it into f
-            #x_stacked = tf.stack(x_unstacked, axis=1) # shape = (k,n)
-            g2.watch(x)
-            f_x = f(x) # shape = (k,)
-        
-        # Calculate gradient of f with respect to x
-        df_dx = g2.gradient(f_x, x) # shape = (k,n)
-        # Turn df/dx into a list of n tensors of shape (k,)
-        df_dx_unstacked = tf.unstack(df_dx, axis=1)
-
-    # Calculate 2nd derivatives
-    d2f_dx2 = []
-    for df_dxi in df_dx_unstacked:
-        # Take 2nd derivative of each dimension separately:
-        #   d/dx_i (df/dx_i)
-        d2f_dx2.append(g1.gradient(df_dxi, x))
+    if flag == "c":
+        alpha = 1
+    elif flag == "p":
+        alpha = -1
+    else:
+        raise ValueError("flag must be c for call or p for put!")
+    if np.isclose(tau, 0.):
+        return np.maximum(alpha * (S - strike), 0.)
     
-    # Stack 2nd derivates
-    d2f_dx2_stacked = tf.stack(d2f_dx2, axis=1) # shape = (k,n)
-    
-    return d2f_dx2_stacked
-f = lambda q : tf.math.log(tf.math.reduce_sum(q**2, axis=1))
-x = tf.random.uniform((5,3))
+    d1 = (np.log(S / strike) + (r - q + 0.5 * np.power(sigma, 2)) * tau) \
+        / (sigma * np.sqrt(tau))
+    d2 = d1 - sigma * np.sqrt(tau)
+    V = alpha * S * np.exp(- q * tau) * ndtr(alpha * d1) \
+        - alpha * strike * np.exp(-r * tau) * ndtr(alpha * d2)
 
-d2f_dx2 = calc_hessian_diag(f, x)
-print(d2f_dx2)
+    return V
+
+# Gemerate dataset
+n_points = int(1e3)
+S = np.linspace(0.5,1.5,n_points)[:,None]
+
+K = 1.
+t = 0.0
+T = 1.
+tau = T-t
+
+r = 0.01
+sigma = 0.25
+
+y = blackScholesMerton(S,K,tau,r,sigma,0.0,"p") 
+
+x = np.concatenate((np.ones_like(S)*tau,np.log(S)), axis = 1)
+target = y
+
+# Train test split
+test_size = 0.2
+cut = int(x.shape[0]*(1-test_size))
+
+idx = np.arange(x.shape[0])
+np.random.shuffle(idx)
+idx_train = idx[:cut]
+idx_test = idx[cut:]
+
+x_train = x[idx_train]
+y_train = target[idx_train]
+x_test = x[idx_test]
+y_test = target[idx_test]
+
+# Model parameters
+n_inputs = 1
+n_outputs = 1
+n_layers = 3
+n_units = 4
+
+activation = "tanh"
+kernel_init = "glorot_uniform"
+
+initial_learning_rate = 0.05
+decay_steps = 100
+decay_rate = 0.5
+learning_rate = tf.keras.optimizers.schedules.InverseTimeDecay(
+  initial_learning_rate, decay_steps, decay_rate)
+optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate)
+epochs = 1000
+
+#####################
+# Spvsd
+####################
+net = FNN([n_inputs]+[n_units]*n_layers+[n_outputs],activation = activation ,kernel_init = kernel_init)
+spvsd = Spvsd(net)
+learning_rate = tf.keras.optimizers.schedules.InverseTimeDecay(
+  initial_learning_rate, decay_steps, decay_rate)
+optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate)
+# Compilation
+loss = tf.keras.losses.MeanSquaredError()
+metric_1 = tf.keras.metrics.MeanSquaredError()
+metric_2 = tf.keras.metrics.MeanAbsoluteError()
+metrics = [metric_1,metric_2]
+
+mask_metric = [0]
+loss = lambda func, x, y: spvsd_loss(func,x,y,tf.keras.losses.MeanSquaredError())
+
+spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
+
+# Training
+metric_history_1 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
+
+# Prediction
+y_pred_1 = spvsd.call(tf.constant(x,dtype = tf.float32))
+
+#####################
+# Spvsd+SPINN
+####################
+net = FNN([n_inputs]+[n_units]*n_layers+[n_outputs],activation = activation ,kernel_init = kernel_init)
+spvsd = Spvsd(net)
+learning_rate = tf.keras.optimizers.schedules.InverseTimeDecay(
+  initial_learning_rate, decay_steps, decay_rate)
+optimizer = tf.keras.optimizers.Adam(learning_rate = learning_rate)
+# Compilation
+loss = tf.keras.losses.MeanSquaredError()
+metric_1 = tf.keras.metrics.MeanSquaredError()
+metric_2 = tf.keras.metrics.MeanAbsoluteError()
+metrics = [metric_1,metric_2]
+
+mask_metric = [0]
+loss_weights = [0.5,0.5]
+loss = lambda func, x, y: BS_SPINN(func,x,y,loss_weights,tf.keras.losses.MeanSquaredError(),r,sigma)
+
+spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
+
+# Training
+metric_history_2 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
+
+# Prediction
+y_pred_2 = spvsd.call(tf.constant(x,dtype = tf.float32))
+
+
+
+
+####################
+# Plot
+####################
+fig, ax = plt.subplots(nrows = 1, ncols = 2 )
+ax[0].plot(np.arange(epochs),metric_history_1[1:,0,0].astype(np.float32) , color = "blue", label = "Spvsd" )
+ax[0].plot(np.arange(epochs),metric_history_2[1:,0,0].astype(np.float32), color = "green", label = "Spvsd+SPINN" )
+ax[0].set_title("MSE")
+ax[0].grid()
+ax[0].set_yscale("log")
+plt.legend()
+
+
+ax[1].plot(x[:,1], y[:,0], color = "blue", label = "Exact" )
+ax[1].plot(x[:,1], y_pred_1[:,0], color = "green", label = "Spvsd" )
+ax[1].plot(x[:,1], y_pred_2[:,0], color = "pink", label = "Spvsd+SPINN" )
+ax[1].set_title("Function")
+ax[1].grid()
+plt.legend()
+
+plt.show()
