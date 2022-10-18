@@ -66,8 +66,8 @@ def trig_hess_loss(func,x,y, loss_weights, metric):
 # BS
 def BS_SPINN(func,x,y,loss_weights,metric,r,sigma):
     y_pred = func(x)
-    loss_spvsd = metric(r*y[:,0],r*y_pred[:,0]) 
-    equation = y_pred[:,1]-0.5*sigma*sigma*x[:,1]*x[:,1]*y_pred[:,-1]*y_pred[:,-1]-r*x[:,1]*y_pred[:,2]+r*y[:,0]
+    loss_spvsd = metric(r*y,r*y_pred[:,0]) 
+    equation = y_pred[:,1]-0.5*sigma*sigma*x[:,1]*x[:,1]*y_pred[:,6]*y_pred[:,6]-r*x[:,1]*y_pred[:,2]+r*y_pred[:,0]
     loss_pinn = metric(0.,equation) 
     losses = [loss_spvsd, loss_pinn]
     losses = tf.convert_to_tensor(losses)

@@ -79,7 +79,7 @@ spvsd.compile(optimizer,loss,metrics, mask = mask_metric)
 
 # Training
 epochs = 1000
-metric_history_1 = spvsd.fit(x_train,y_train,epochs,validation_data = (x_test,y_test))
+metric_history_1 = spvsd.fit(x_train,y_train[:,mask_loss],epochs,validation_data = (x_test,y_test))
 
 # Prediction
 y_pred_1 = spvsd.call(tf.constant(x,dtype = tf.float32))
